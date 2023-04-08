@@ -21,3 +21,12 @@ PORT_HTTP = 52081
 PORT_HTTPS = 52444
 
 ```
+
+# 运行
+```bash
+    python3 run_openai_api_http.py
+```
+或者
+```bash
+    python3 run_openai_api_https.py
+```
