@@ -11,6 +11,6 @@ PROXY_IP_PORT = "127.0.0.1:7890"
 # 主机
 HOST = "0.0.0.0"
 
-# Port
+# 监听端口Port，https时当前目录需要有ssl.cert和ssl.key文件
 PORT_HTTP = 52081
 PORT_HTTPS = 52444
