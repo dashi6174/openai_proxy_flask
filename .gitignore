@@ -2,6 +2,7 @@
 config.py
 ssl.cert
 ssl.key
+*.log
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
