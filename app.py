@@ -1,14 +1,18 @@
 import os
-
 import requests
 from flask import Flask, request, jsonify, Response
 from loguru import logger
 
-app = Flask(__name__)
-
 if not os.path.exists("config.py"):
     raise Exception('配置文件不存在，请根据config-template.py模板创建config.py文件')
 from config import PROXY_KEY, PROXY_IP_PORT, OPENAI_API_KEY
+
+app = Flask(__name__)
+proxies = {
+    'http': f'http://{PROXY_IP_PORT}',
+    'https': f'http://{PROXY_IP_PORT}',
+}
+url = "https://api.openai.com/v1/chat/completions"
 
 
 @app.errorhandler(404)
@@ -75,9 +79,28 @@ def models():
     return jsonify(rst)
 
 
-@app.route('/v1/chat/completions', methods=['POST'])
+def get_req_headers(request):
+    headers = {}
+    for k, v in request.headers:
+        if k != 'Host':
+            headers[k] = v
+    return headers
+
+
+def get_resp_headers(resp):
+    excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+    headers = [(name, value) for (name, value) in resp.headers.items() if name.lower() not in excluded_headers]
+    return headers
+
+
+@app.route('/v1/chat/completions', methods=['POST', 'OPTIONS'])
 def openai_proxy():
-    logger.debug(f"req: {request.data.decode('utf-8')}")
+    logger.debug(f"method: {request.method}, req: {request.data.decode('utf-8')}, header: {request.headers}")
+
+    if request.method == 'OPTIONS':
+        resp = requests.options(url, headers=get_req_headers(request), proxies=proxies)
+        return Response(resp.content, resp.status_code, get_resp_headers(resp),
+                        mimetype=resp.headers.get('Content-Type'))
 
     if request.headers.get("Authorization") != "Bearer " + PROXY_KEY:
         msg = f"Invalid API key: {request.headers.get('Authorization')}"
@@ -85,7 +108,6 @@ def openai_proxy():
         return jsonify({"error": msg}), 401
 
     if "application/json" not in request.headers.get("Content-Type"):
-        # application/json; charset=utf-8
         msg = f"Invalid Content-Type: {request.headers.get('Content-Type')}"
         logger.warning(msg)
         return jsonify({"error": msg}), 401
@@ -97,26 +119,23 @@ def openai_proxy():
 
     r_json = request.json
 
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {"Authorization": "Bearer " + OPENAI_API_KEY}
+    headers = get_req_headers(request)
+    headers['Authorization'] = "Bearer " + OPENAI_API_KEY
+
     if PROXY_IP_PORT:
-        proxies = {
-            'http': f'http://{PROXY_IP_PORT}',
-            'https': f'http://{PROXY_IP_PORT}',
-        }
-        response = requests.post(url=url, headers=headers, json=r_json, proxies=proxies, stream=True)
+
+        resp = requests.post(url=url, headers=headers, json=r_json, proxies=proxies, stream=True)
     else:
-        response = requests.post(url=url, headers=headers, json=r_json, stream=True)
+        resp = requests.post(url=url, headers=headers, json=r_json, stream=True)
+    logger.info(f"resp.headers: {resp.headers}")
+    headers = get_resp_headers(resp)
 
     def generate():
         msgs = b''
-        for item in response:
+        for item in resp:
             msgs += item
             yield item
         else:
             logger.info(f"rsp: {msgs.decode('utf-8')}")
 
-    if r_json.get('stream'):
-        return Response(generate(), mimetype='text/event-stream')
-    else:
-        return Response(generate(), mimetype='application/json')
+    return Response(generate(), resp.status_code, headers, mimetype=resp.raw.headers.get('Content-Type'))
