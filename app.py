@@ -82,7 +82,7 @@ def models():
 def get_req_headers(request):
     headers = {}
     for k, v in request.headers:
-        if k != 'Host':
+        if k not in ['Host', 'Accept-Encoding', 'Content-Length', 'Transfer-Encoding', 'Connection']:
             headers[k] = v
     return headers
 
