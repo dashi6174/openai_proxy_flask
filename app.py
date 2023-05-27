@@ -42,12 +42,21 @@ def cre_img(r_json, proxies):
     prompt = r_json['messages'][-1]['content'][3:]
 
     size_map = {"【s】": '256x256', "【m】": '512x512', "【b】": '1024x1024'}
-
     if prompt[:3] in size_map:
         size = size_map[prompt[:3]]
         prompt = prompt[3:]
     else:
         size = '512x512'
+
+    n_map = {"【2】": 2, "【4】": 4, "【8】": 8, "【10】": 10}
+    if prompt[:3] in n_map:
+        n = n_map[prompt[:3]]
+        prompt = prompt[3:]
+    elif prompt[:4] in n_map:
+        n = n_map[prompt[:4]]
+        prompt = prompt[4:]
+    else:
+        n = 1
 
     # 请求
     logger.info(f"[OPEN_AI] image_query={prompt}")
@@ -56,7 +65,7 @@ def cre_img(r_json, proxies):
     response = openai.Image.create(
         api_key=OPENAI_API_KEY,
         prompt=prompt,
-        n=1,
+        n=n,
         size=size,
     )
 
@@ -65,10 +74,10 @@ def cre_img(r_json, proxies):
     for item in response['data']:
         image_url_arr.append(f"![image]({item['url']})")
         logger.info(f"[OPEN_AI] image_url={item['url']}")
-    imgs = '  \\n'.join(image_url_arr)
 
     # 响应
     if r_json.get('stream'):
+        imgs = '  \\n'.join(image_url_arr)
         body = 'data: {"id":"chatcmpl-7KlAnQk1IUTMEkRgAztMDkjCMM1Sy","object":"chat.completion.chunk",' \
                '"created":1685182249,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"' \
                + f"{imgs}" + '"},"index":0,"finish_reason":"stop"}]}\n\n' \
@@ -77,6 +86,7 @@ def cre_img(r_json, proxies):
         return Response(body, 200, headers={}, mimetype="text/event-stream")
 
     else:
+        imgs = '  \n'.join(image_url_arr)
         body = {"id": "chatcmpl-7Kpri4iJ148DQhiUQjUpGGgvO0fWj", "object": "chat.completion", "created": 1685200286,
                 "model": "gpt-3.5-turbo-0301",
                 "usage": {"prompt_tokens": len(prompt), "completion_tokens": len(imgs),
