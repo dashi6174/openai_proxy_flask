@@ -46,7 +46,7 @@ def cre_img(r_json, proxies):
         size = size_map[prompt[:3]]
         prompt = prompt[3:]
     else:
-        size = '256x256'
+        size = '512x512'
 
     logger.info(f"[OPEN_AI] image_query={prompt}")
     if proxies:
