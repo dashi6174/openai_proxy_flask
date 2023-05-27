@@ -5,78 +5,20 @@ from loguru import logger
 
 if not os.path.exists("config.py"):
     raise Exception('配置文件不存在，请根据config-template.py模板创建config.py文件')
-from config import PROXY_KEY, PROXY_IP_PORT, OPENAI_API_KEY
+from config import *
 
 app = Flask(__name__)
-proxies = {
-    'http': f'http://{PROXY_IP_PORT}',
-    'https': f'http://{PROXY_IP_PORT}',
-}
-url = "https://api.openai.com/v1/chat/completions"
+
+api_list = [
+    "/v1/chat/completions",
+    "/v1/embeddings"
+]
 
 
 @app.errorhandler(404)
 def not_found(error):
     logger.debug(f"req: {request.method} {request.data}")
     return jsonify({'error': 'Not found'}), 404
-
-
-@app.route('/v1/models', methods=['GET'])
-def models():
-    rst = {
-        "object": "list",
-        "data": [
-            {
-                "id": "gpt-3.5-turbo-0301",
-                "object": "model",
-                "created": 1677649963,
-                "owned_by": "openai",
-                "permission": [
-                    {
-                        "id": "modelperm-vrvwsIOWpZCbya4ceX3Kj4qw",
-                        "object": "model_permission",
-                        "created": 1679602087,
-                        "allow_create_engine": False,
-                        "allow_sampling": True,
-                        "allow_logprobs": True,
-                        "allow_search_indices": False,
-                        "allow_view": True,
-                        "allow_fine_tuning": False,
-                        "organization": "*",
-                        "group": None,
-                        "is_blocking": False
-                    }
-                ],
-                "root": "gpt-3.5-turbo-0301",
-                "parent": None
-            },
-            {
-                "id": "gpt-3.5-turbo",
-                "object": "model",
-                "created": 1677610602,
-                "owned_by": "openai",
-                "permission": [
-                    {
-                        "id": "modelperm-M56FXnG1AsIr3SXq8BYPvXJA",
-                        "object": "model_permission",
-                        "created": 1679602088,
-                        "allow_create_engine": False,
-                        "allow_sampling": True,
-                        "allow_logprobs": True,
-                        "allow_search_indices": False,
-                        "allow_view": True,
-                        "allow_fine_tuning": False,
-                        "organization": "*",
-                        "group": None,
-                        "is_blocking": False
-                    }
-                ],
-                "root": "gpt-3.5-turbo",
-                "parent": None
-            }
-        ]
-    }
-    return jsonify(rst)
 
 
 def get_req_headers(request):
@@ -93,40 +35,54 @@ def get_resp_headers(resp):
     return headers
 
 
-@app.route('/v1/chat/completions', methods=['POST', 'OPTIONS'])
-def openai_proxy():
-    logger.debug(f"method: {request.method}, req: {request.data.decode('utf-8')}, header: {request.headers}")
+@app.route('/v1/<path:path>', methods=['POST', 'GET', 'OPTIONS'])
+def openai_proxy(path):
+    api = f"/v1/{path}"
+    url = "https://api.openai.com" + api
 
+    logger.debug(
+        f"api: {api}, method: {request.method}, req: {request.data.decode('utf-8')}, header: {request.headers}")
+
+    # 代理
+    if PROXY_IP_PORT:
+        proxies = {
+            'http': f'http://{PROXY_IP_PORT}',
+            'https': f'http://{PROXY_IP_PORT}',
+        }
+    else:
+        proxies = None
+
+    # options不用带key
     if request.method == 'OPTIONS':
         resp = requests.options(url, headers=get_req_headers(request), proxies=proxies)
         return Response(resp.content, resp.status_code, get_resp_headers(resp),
                         mimetype=resp.headers.get('Content-Type'))
+
+    # 校验key
 
     if request.headers.get("Authorization") != "Bearer " + PROXY_KEY:
         msg = f"Invalid API key: {request.headers.get('Authorization')}"
         logger.warning(msg)
         return jsonify({"error": msg}), 401
 
-    if "application/json" not in request.headers.get("Content-Type"):
-        msg = f"Invalid Content-Type: {request.headers.get('Content-Type')}"
-        logger.warning(msg)
-        return jsonify({"error": msg}), 401
+    # todo: 校验api是否已支持，哪些耗钱的api要剔除掉，DALL·E 、 Davinci 等
 
-    if request.json.get('model') not in ['gpt-3.5-turbo-0301', "gpt-3.5-turbo"]:
-        msg = f"Invalid model: {request.json.get('model')}"
-        logger.warning(msg)
-        return jsonify({"error": msg}), 401
+    # todo: 校验个人gpt4.0额度
 
-    r_json = request.json
+    # 请求参数
+    if request.method == "GET":
+        r_json = None
+    else:
+        r_json = request.json
 
     headers = get_req_headers(request)
     headers['Authorization'] = "Bearer " + OPENAI_API_KEY
 
-    if PROXY_IP_PORT:
-
-        resp = requests.post(url=url, headers=headers, json=r_json, proxies=proxies, stream=True)
+    # 向openai请求
+    if request.method == "GET":
+        resp = requests.get(url=url, headers=headers, proxies=proxies, stream=True)
     else:
-        resp = requests.post(url=url, headers=headers, json=r_json, stream=True)
+        resp = requests.post(url=url, headers=headers, json=r_json, proxies=proxies, stream=True)
     logger.info(f"resp.headers: {resp.headers}")
     headers = get_resp_headers(resp)
 
