@@ -1,3 +1,4 @@
+import json
 import os
 
 import openai
@@ -40,7 +41,7 @@ def get_resp_headers(resp):
 def cre_img(r_json, proxies):
     prompt = r_json['messages'][-1]['content'][3:]
 
-    size_map = {"【8】": '256x256', "【9】": '512x512', "【10】": '1024x1024'}
+    size_map = {"【s】": '256x256', "【m】": '512x512', "【b】": '1024x1024'}
 
     if prompt[:3] in size_map:
         size = size_map[prompt[:3]]
@@ -48,6 +49,7 @@ def cre_img(r_json, proxies):
     else:
         size = '512x512'
 
+    # 请求
     logger.info(f"[OPEN_AI] image_query={prompt}")
     if proxies:
         openai.proxy = proxies
@@ -57,15 +59,31 @@ def cre_img(r_json, proxies):
         n=1,
         size=size,
     )
-    image_url = response["data"][0]["url"]
-    logger.info(f"[OPEN_AI] image_url={image_url}")
 
-    body = 'data: {"id":"chatcmpl-7KlAnQk1IUTMEkRgAztMDkjCMM1Sy","object":"chat.completion.chunk",' \
-           '"created":1685182249,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"' \
-           + f"![图片]({image_url})" + '"},"index":0,"finish_reason":"stop"}]}\n\n' \
-           + 'data: [DONE]\n\n'
+    # 组装
+    image_url_arr = []
+    for item in response['data']:
+        image_url_arr.append(f"![image]({item['url']})")
+        logger.info(f"[OPEN_AI] image_url={item['url']}")
+    imgs = '  \\n'.join(image_url_arr)
 
-    return Response(body, 200, headers={}, mimetype="text/event-stream")
+    # 响应
+    if r_json.get('stream'):
+        body = 'data: {"id":"chatcmpl-7KlAnQk1IUTMEkRgAztMDkjCMM1Sy","object":"chat.completion.chunk",' \
+               '"created":1685182249,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"' \
+               + f"{imgs}" + '"},"index":0,"finish_reason":"stop"}]}\n\n' \
+               + 'data: [DONE]\n\n'
+        logger.debug(body)
+        return Response(body, 200, headers={}, mimetype="text/event-stream")
+
+    else:
+        body = {"id": "chatcmpl-7Kpri4iJ148DQhiUQjUpGGgvO0fWj", "object": "chat.completion", "created": 1685200286,
+                "model": "gpt-3.5-turbo-0301",
+                "usage": {"prompt_tokens": len(prompt), "completion_tokens": len(imgs),
+                          "total_tokens": len(prompt) + len(imgs)},
+                "choices": [{"message": {"role": "assistant", "content": imgs}, "finish_reason": "stop", "index": 0}]}
+        logger.debug(body)
+        return Response(json.dumps(body), 200, headers={}, mimetype="application/json")
 
 
 @app.route('/v1/<path:path>', methods=['POST', 'GET', 'OPTIONS'])
