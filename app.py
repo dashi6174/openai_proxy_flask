@@ -1,4 +1,6 @@
 import os
+
+import openai
 import requests
 from flask import Flask, request, jsonify, Response
 from loguru import logger
@@ -33,6 +35,37 @@ def get_resp_headers(resp):
     excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
     headers = [(name, value) for (name, value) in resp.headers.items() if name.lower() not in excluded_headers]
     return headers
+
+
+def cre_img(r_json, proxies):
+    prompt = r_json['messages'][-1]['content'][3:]
+
+    size_map = {"【8】": '256x256', "【9】": '512x512', "【10】": '1024x1024'}
+
+    if prompt[:3] in size_map:
+        size = size_map[prompt[:3]]
+        prompt = prompt[3:]
+    else:
+        size = '256x256'
+
+    logger.info(f"[OPEN_AI] image_query={prompt}")
+    if proxies:
+        openai.proxy = proxies
+    response = openai.Image.create(
+        api_key=OPENAI_API_KEY,
+        prompt=prompt,
+        n=1,
+        size=size,
+    )
+    image_url = response["data"][0]["url"]
+    logger.info(f"[OPEN_AI] image_url={image_url}")
+
+    body = 'data: {"id":"chatcmpl-7KlAnQk1IUTMEkRgAztMDkjCMM1Sy","object":"chat.completion.chunk",' \
+           '"created":1685182249,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"' \
+           + f"![图片]({image_url})" + '"},"index":0,"finish_reason":"stop"}]}\n\n' \
+           + 'data: [DONE]\n\n'
+
+    return Response(body, 200, headers={}, mimetype="text/event-stream")
 
 
 @app.route('/v1/<path:path>', methods=['POST', 'GET', 'OPTIONS'])
@@ -74,6 +107,10 @@ def openai_proxy(path):
         r_json = None
     else:
         r_json = request.json
+        # 通过特殊的前缀支持画图输出
+        if api == "/v1/chat/completions" \
+                and r_json['messages'][-1]['role'] == 'user' and r_json['messages'][-1]['content'][:3] == '【画】':
+            return cre_img(r_json, proxies)
 
     headers = get_req_headers(request)
     headers['Authorization'] = "Bearer " + OPENAI_API_KEY
