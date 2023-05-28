@@ -1,5 +1,6 @@
 import json
 import os
+from urllib.parse import urlparse
 
 import openai
 import requests
@@ -38,9 +39,10 @@ def get_resp_headers(resp):
     return headers
 
 
-def cre_img(r_json, proxies):
+def cre_img(r_json, host_url, proxies):
     prompt = r_json['messages'][-1]['content'][3:]
 
+    # 图片大小
     size_map = {"【s】": '256x256', "【m】": '512x512', "【b】": '1024x1024'}
     if prompt[:3] in size_map:
         size = size_map[prompt[:3]]
@@ -48,6 +50,7 @@ def cre_img(r_json, proxies):
     else:
         size = '512x512'
 
+    # 图片数量
     n_map = {"【2】": 2, "【4】": 4, "【8】": 8, "【10】": 10}
     if prompt[:3] in n_map:
         n = n_map[prompt[:3]]
@@ -72,8 +75,13 @@ def cre_img(r_json, proxies):
     # 组装
     image_url_arr = []
     for item in response['data']:
-        image_url_arr.append(f"![image]({item['url']})")
         logger.info(f"[OPEN_AI] image_url={item['url']}")
+
+        filename = f"static/imgs/{os.path.basename(urlparse(item['url']).path)}"
+        response = requests.get(item['url'])
+        with open(filename, 'wb') as f:
+            f.write(response.content)
+        image_url_arr.append(f"![image]({host_url + filename})")
 
     # 响应
     if r_json.get('stream'):
@@ -138,7 +146,7 @@ def openai_proxy(path):
         # 通过特殊的前缀支持画图输出
         if api == "/v1/chat/completions" \
                 and r_json['messages'][-1]['role'] == 'user' and r_json['messages'][-1]['content'][:3] == '【画】':
-            return cre_img(r_json, proxies)
+            return cre_img(r_json, request.host_url, proxies)
 
     headers = get_req_headers(request)
     headers['Authorization'] = "Bearer " + OPENAI_API_KEY

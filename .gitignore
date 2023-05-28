@@ -4,6 +4,9 @@ ssl.cert
 ssl.key
 *.log
 
+static/imgs/*
+!static/imgs/README.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
