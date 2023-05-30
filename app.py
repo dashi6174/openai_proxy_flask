@@ -39,8 +39,19 @@ def get_resp_headers(resp):
     return headers
 
 
-def cre_img(r_json, host_url, proxies):
-    prompt = r_json['messages'][-1]['content'][3:]
+def cre_img(api, r_json, host_url, proxies):
+    # 检查
+    if not api == "/v1/chat/completions":
+        return None
+
+    if r_json['messages'][-1]['role'] == 'user' and r_json['messages'][-1]['content'][:3] == '【画】':
+        prompt = r_json['messages'][-1]['content'][3:]
+    elif len(r_json['messages']) > 1 and r_json['messages'][-1]['role'] == 'system' \
+            and r_json['messages'][-2]['role'] == 'user' and r_json['messages'][-2]['content'][:3] == '【画】':
+        # system role在最后一条
+        prompt = r_json['messages'][-2]['content'][3:]
+    else:
+        return None
 
     # 图片大小
     size_map = {"【s】": '256x256', "【m】": '512x512', "【b】": '1024x1024'}
@@ -87,15 +98,18 @@ def cre_img(r_json, host_url, proxies):
     if r_json.get('stream'):
         imgs = '  \\n'.join(image_url_arr)
         body = 'data: {"id":"chatcmpl-7KlAnQk1IUTMEkRgAztMDkjCMM1Sy","object":"chat.completion.chunk",' \
-               '"created":1685182249,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"' \
-               + f"{imgs}" + '"},"index":0,"finish_reason":"stop"}]}\n\n' \
+               '"created":1685450197,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"' \
+               + f"{imgs}" + '"},"index":0,"finish_reason":null}]}\n\n' \
+               + 'data: {"id":"chatcmpl-7KlAnQk1IUTMEkRgAztMDkjCMM1Sy","object":"chat.completion.chunk",' \
+                 '"created":1685450197,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{},' \
+                 '"index":0,"finish_reason":stop}]}\n\n' \
                + 'data: [DONE]\n\n'
         logger.debug(body)
         return Response(body, 200, headers={}, mimetype="text/event-stream")
 
     else:
         imgs = '  \n'.join(image_url_arr)
-        body = {"id": "chatcmpl-7Kpri4iJ148DQhiUQjUpGGgvO0fWj", "object": "chat.completion", "created": 1685200286,
+        body = {"id": "chatcmpl-7KlAnQk1IUTMEkRgAztMDkjCMM1Sy", "object": "chat.completion", "created": 1685450197,
                 "model": "gpt-3.5-turbo-0301",
                 "usage": {"prompt_tokens": len(prompt), "completion_tokens": len(imgs),
                           "total_tokens": len(prompt) + len(imgs)},
@@ -144,9 +158,9 @@ def openai_proxy(path):
     else:
         r_json = request.json
         # 通过特殊的前缀支持画图输出
-        if api == "/v1/chat/completions" \
-                and r_json['messages'][-1]['role'] == 'user' and r_json['messages'][-1]['content'][:3] == '【画】':
-            return cre_img(r_json, request.host_url, proxies)
+        resp = cre_img(api, r_json, request.host_url, proxies)
+        if resp:
+            return resp
 
     headers = get_req_headers(request)
     headers['Authorization'] = "Bearer " + OPENAI_API_KEY
