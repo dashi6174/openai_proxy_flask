@@ -62,7 +62,8 @@ def cre_img(api, r_json, host_url, proxies):
         size = '512x512'
 
     # 图片数量
-    n_map = {"【2】": 2, "【4】": 4, "【8】": 8, "【10】": 10}
+    n_map = {"【1】": 1, "【2】": 2, "【3】": 3, "【4】": 4, "【5】": 5,
+             "【6】": 6, "【7】": 7, "【8】": 8, "【9】": 9, "【10】": 10}
     if prompt[:3] in n_map:
         n = n_map[prompt[:3]]
         prompt = prompt[3:]
