@@ -89,7 +89,10 @@ def cre_img(api, r_json, host_url, proxies):
         logger.info(f"[OPEN_AI] image_url={item['url']}")
 
         filename = f"static/imgs/{os.path.basename(urlparse(item['url']).path)}"
-        response = requests.get(item['url'])
+        if proxies:
+            response = requests.get(item['url'], proxies=proxies)
+        else:
+            response = requests.get(item['url'])
         with open(filename, 'wb') as f:
             f.write(response.content)
         image_url_arr.append(f"![image]({host_url + filename})")
