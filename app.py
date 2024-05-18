@@ -125,7 +125,7 @@ def cre_img(api, r_json, host_url, proxies):
 @app.route('/v1/<path:path>', methods=['POST', 'GET', 'OPTIONS'])
 def openai_proxy(path):
     api = f"/v1/{path}"
-    url = "https://api.openai.com" + api
+    url = f"{OPENAI_BASE_URL}/{path}"
 
     logger.debug(
         f"api: {api}, method: {request.method}, req: {request.data.decode('utf-8')}, header: {request.headers}")
