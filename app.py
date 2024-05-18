@@ -128,7 +128,7 @@ def openai_proxy(path):
     url = f"{OPENAI_BASE_URL}/{path}"
 
     logger.debug(
-        f"api: {api}, method: {request.method}, req: {request.data.decode('utf-8')}, header: {request.headers}")
+        f"api: {api}, method: {request.method}, header: {request.headers}")
 
     # 代理
     if PROXY_IP_PORT:
@@ -161,6 +161,7 @@ def openai_proxy(path):
         r_json = None
     else:
         r_json = request.json
+        logger.debug("Request body: {}".format(r_json))
         # 通过特殊的前缀支持画图输出
         resp = cre_img(api, r_json, request.host_url, proxies)
         if resp:
